@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chat App</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="chat-layout">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <div class="me" id="meLabel">...</div>
+        <button class="logout" id="logoutBtn">Log out</button>
+      </div>
+      <div class="room-list" id="roomList"></div>
+      <div class="new-room-row">
+        <input type="text" id="newRoomInput" placeholder="New room name" maxlength="40">
+        <button id="newRoomBtn">+</button>
+      </div>
+    </div>
+
+    <div class="chat-main">
+      <div class="chat-header" id="roomHeader">#general</div>
+      <div class="messages" id="messages"></div>
+      <form class="composer" id="composerForm">
+        <input type="text" id="messageInput" placeholder="Type a message..." maxlength="2000" autocomplete="off">
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  </div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+let me = null;
+let currentRoom = null;
+let socket = null;
+
+const meLabel = document.getElementById('meLabel');
+const roomList = document.getElementById('roomList');
+const roomHeader = document.getElementById('roomHeader');
+const messagesEl = document.getElementById('messages');
+const composerForm = document.getElementById('composerForm');
+const messageInput = document.getElementById('messageInput');
+
+async function init() {
+  const meRes = await fetch('/api/me');
+  if (!meRes.ok) {
+    window.location.href = '/index.html';
+    return;
+  }
+  me = await meRes.json();
+  meLabel.textContent = me.username;
+
+  socket = io();
+  socket.on('new_message', (msg) => {
+    if (msg.room_id === currentRoom.id) renderMessage(msg);
+  });
+
+  await loadRooms();
+}
+
+async function loadRooms() {
+  const res = await fetch('/api/rooms');
+  const rooms = await res.json();
+  roomList.innerHTML = '';
+  rooms.forEach((room, i) => {
+    const div = document.createElement('div');
+    div.className = 'room-item' + (currentRoom && currentRoom.id === room.id ? ' active' : '');
+    div.textContent = '# ' + room.name;
+    div.addEventListener('click', () => selectRoom(room));
+    roomList.appendChild(div);
+    if (!currentRoom && i === 0) selectRoom(room);
+  });
+}
+
+async function selectRoom(room) {
+  if (currentRoom) socket.emit('leave_room', currentRoom.id);
+  currentRoom = room;
+  roomHeader.textContent = '# ' + room.name;
+  document.querySelectorAll('.room-item').forEach(el => el.classList.remove('active'));
+  [...roomList.children].forEach(el => {
+    if (el.textContent === '# ' + room.name) el.classList.add('active');
+  });
+
+  socket.emit('join_room', room.id);
+  messagesEl.innerHTML = '';
+  const res = await fetch(`/api/rooms/${room.id}/messages`);
+  const msgs = await res.json();
+  msgs.forEach(renderMessage);
+}
+
+function renderMessage(msg) {
+  const div = document.createElement('div');
+  const isOwn = msg.user_id === me.id;
+  div.className = 'message' + (isOwn ? ' own' : '');
+  const time = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  div.innerHTML = `<div class="meta">${isOwn ? 'You' : escapeHtml(msg.username)} · ${time}</div>${escapeHtml(msg.body)}`;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+composerForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const body = messageInput.value.trim();
+  if (!body || !currentRoom) return;
+  socket.emit('send_message', { roomId: currentRoom.id, body });
+  messageInput.value = '';
+});
+
+document.getElementById('newRoomBtn').addEventListener('click', async () => {
+  const input = document.getElementById('newRoomInput');
+  const name = input.value.trim();
+  if (!name) return;
+  const res = await fetch('/api/rooms', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  });
+  if (res.ok) {
+    input.value = '';
+    await loadRooms();
+  } else {
+    const data = await res.json();
+    alert(data.error || 'Could not create room');
+  }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await fetch('/api/logout', { method: 'POST' });
+  window.location.href = '/index.html';
+});
+
+init();
+</script>
+</body>
+</html>
