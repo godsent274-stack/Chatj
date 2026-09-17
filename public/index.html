@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chat App - Login</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <h1 id="title">Welcome back</h1>
+      <p class="subtitle" id="subtitle">Log in to start chatting</p>
+
+      <form id="authForm">
+        <label for="username">Username</label>
+        <input type="text" id="username" autocomplete="username" required minlength="3">
+
+        <label for="password">Password</label>
+        <input type="password" id="password" autocomplete="current-password" required minlength="6">
+
+        <button type="submit" class="btn-primary" id="submitBtn">Log in</button>
+        <div class="error-msg" id="errorMsg"></div>
+      </form>
+
+      <div class="toggle-row">
+        <span id="toggleText">Don't have an account?</span>
+        <a id="toggleLink">Sign up</a>
+      </div>
+    </div>
+  </div>
+
+<script>
+let mode = 'login'; // or 'signup'
+
+const title = document.getElementById('title');
+const subtitle = document.getElementById('subtitle');
+const submitBtn = document.getElementById('submitBtn');
+const toggleText = document.getElementById('toggleText');
+const toggleLink = document.getElementById('toggleLink');
+const errorMsg = document.getElementById('errorMsg');
+const form = document.getElementById('authForm');
+
+// If already logged in, go straight to chat
+fetch('/api/me').then(r => { if (r.ok) window.location.href = '/chat.html'; });
+
+toggleLink.addEventListener('click', () => {
+  mode = mode === 'login' ? 'signup' : 'login';
+  if (mode === 'signup') {
+    title.textContent = 'Create an account';
+    subtitle.textContent = 'Sign up to start chatting';
+    submitBtn.textContent = 'Sign up';
+    toggleText.textContent = 'Already have an account?';
+    toggleLink.textContent = 'Log in';
+  } else {
+    title.textContent = 'Welcome back';
+    subtitle.textContent = 'Log in to start chatting';
+    submitBtn.textContent = 'Log in';
+    toggleText.textContent = "Don't have an account?";
+    toggleLink.textContent = 'Sign up';
+  }
+  errorMsg.textContent = '';
+});
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  errorMsg.textContent = '';
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+
+  const endpoint = mode === 'login' ? '/api/login' : '/api/signup';
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      errorMsg.textContent = data.error || 'Something went wrong';
+      return;
+    }
+    window.location.href = '/chat.html';
+  } catch (err) {
+    errorMsg.textContent = 'Network error. Please try again.';
+  }
+});
+</script>
+</body>
+</html>
